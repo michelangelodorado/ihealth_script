@@ -6,7 +6,9 @@ CLIENT_SECRET="6f2n514tlRVhC7bGk1u4xKG8ksfSA1lh9XBF5Nsmnbq1Ptv6M7xg-1v25MRmEzZK"
 INPUT_FILE="qkview_links.txt"
 TIMESTAMP=$(date "+%Y%m%d_%H%M%S")
 OUTPUT_FILE="qkview_summary_${TIMESTAMP}.csv"
-COMMAND_ID="81aab6fd832ed03b46618cc17c5ec6606eda26b5"
+CPU_CMD_ID="81aab6fd832ed03b46618cc17c5ec6606eda26b5"
+VERSION_CMD_ID="ab7a44c83cbb6c937f1405c611614902e77ab8ee"
+
 
 # ==== ENCODE TO BASE64 ====
 BASIC_AUTH=$(printf "%s:%s" "$CLIENT_ID" "$CLIENT_SECRET" | base64)
@@ -51,17 +53,34 @@ get_decoded_command_output() {
 get_avg_cpu() {
   local qkview_id=$1
   local decoded
-  decoded=$(get_decoded_command_output "$qkview_id" "$COMMAND_ID")
+  decoded=$(get_decoded_command_output "$qkview_id" "$CPU_CMD_ID")
 
   if [[ -n "$decoded" ]]; then
-    echo "$decoded" | awk '/^Utilization/ { print $3; exit }'
+    echo "$decoded" | awk '/System CPU Usage/ {getline; getline} /Utilization/ {print $(NF-1); exit}'
   else
     echo "N/A"
   fi
 }
 
+#=====GET VERSION =====
+
+get_software_version() {
+  local qkview_id=$1
+  local decoded
+  decoded=$(get_decoded_command_output "$qkview_id" "$VERSION_CMD_ID")
+
+  if [[ -n "$decoded" ]]; then
+    echo "$decoded" | awk '/^  Version/ { print $2; exit }'
+  else
+    echo "N/A"
+  fi
+}
+
+
+
 # ==== WRITE CSV HEADER ====
-echo "QKView ID,Hostname,Description,Status,Generation Date,File Size (bytes),Chassis Serial,Avg CPU (%)" > "$OUTPUT_FILE"
+echo "QKView ID,Hostname,Description,Status,Generation Date,File Size (bytes),Chassis Serial,Avg CPU (%),Software Version" > "$OUTPUT_FILE"
+
 
 # ==== MAIN LOOP ====
 while IFS= read -r line; do
@@ -84,8 +103,9 @@ while IFS= read -r line; do
     HUMAN_DATE=$(date -r $((GEN_DATE / 1000)) "+%Y-%m-%d %H:%M:%S" 2>/dev/null)
 
     AVG_CPU=$(get_avg_cpu "$QKVIEW_ID")
+    SOFTWARE_VERSION=$(get_software_version "$QKVIEW_ID")
 
-    echo "$QKVIEW_ID,\"$HOSTNAME\",\"$DESCRIPTION\",$STATUS,\"$HUMAN_DATE\",$FILE_SIZE,\"$SERIAL_NUMBER\",$AVG_CPU" >> "$OUTPUT_FILE"
+    echo "$QKVIEW_ID,\"$HOSTNAME\",\"$DESCRIPTION\",$STATUS,\"$HUMAN_DATE\",$FILE_SIZE,\"$SERIAL_NUMBER\",$AVG_CPU,\"$SOFTWARE_VERSION\"" >> "$OUTPUT_FILE"
     echo "✅ Saved: $QKVIEW_ID"
   else
     echo "⚠️  Invalid QKView link: $line"
